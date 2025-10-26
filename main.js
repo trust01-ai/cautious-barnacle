@@ -135,13 +135,13 @@ app.post('/api/submit', async (req, res) => {
     // Check Telegram configuration
     let telegramStatus = 'not_configured';
     
-    if (CONFIG.TELEGRAM.BOT_TOKEN === '8346330872:AAF8YEtXWPZaRZQhIHgnaG7pXg7Lyaf30aw') {
-      console.log('❌ TELEGRAM_BOT_TOKEN not configured');
-      telegramStatus = 'not_configured';
-    } else if (CONFIG.TELEGRAM.CHAT_ID === '5546373743') {
-      console.log('❌ TELEGRAM_CHAT_ID not configured');
-      telegramStatus = 'not_configured';
-    } else {
+    if (CONFIG.TELEGRAM.BOT_TOKEN === 'YOUR_BOT_TOKEN_HERE') {
+    console.log('❌ TELEGRAM_BOT_TOKEN not configured');
+    telegramStatus = 'not_configured';
+  } else if (CONFIG.TELEGRAM.CHAT_ID === 'YOUR_CHAT_ID_HERE') {
+    console.log('❌ TELEGRAM_CHAT_ID not configured');
+    telegramStatus = 'not_configured';
+  } else {
       console.log('✅ Telegram credentials appear to be configured');
       
       try {
@@ -236,3 +236,4 @@ app.listen(CONFIG.PORT, () => {
   console.log(`📍 Test: http://localhost:${CONFIG.PORT}/api/test-telegram`);
   console.log('⚠️  REMEMBER: Update BOT_TOKEN and CHAT_ID in the code!');
 });
+
